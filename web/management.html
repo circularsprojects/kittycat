@@ -47,13 +47,20 @@
         <button type="submit">Upload</button>
     </form>
     <ul>
-        <li><a href="/Cargo.toml">Cargo.toml</a> <button onclick="copy('Cargo.toml')">Copy Link</button> <button>Delete</button></li>
+        {FILES_LIST}
+        <!-- <li><a href="/Cargo.toml">Cargo.toml</a> <button onclick="copy('Cargo.toml')">Copy Link</button> <button onclick="deleteFile('Cargo.toml')">Delete</button></li> -->
     </ul>
     <footer>{VERSION_STRING}</footer>
 
     <script>
         function copy(text) {
             navigator.clipboard.writeText(text);
+        }
+
+        function deleteFile(file) {
+            if (confirm(`Are you sure you want to delete ${file}?`)) {
+
+            }
         }
     </script>
 </body>

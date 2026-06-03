@@ -1,21 +1,37 @@
+use kittycat::html::{html_versionstr, replace_files};
+
 use actix_web::{middleware::Logger, App, HttpRequest, HttpResponse, HttpServer, Responder, get, post, web};
 use actix_files::NamedFile;
 use std::{io::Read, path::PathBuf, format};
-
-const VERSION_STRING: &str = include_str!(concat!(env!("OUT_DIR"), "/version"));
+use serde::{Deserialize};
+use dotenvy::dotenv;
+use std::env;
 
 #[get("/")]
 async fn index() -> impl Responder {
     HttpResponse::Ok().content_type("text/html").body(html_versionstr("web/index.html").await)
 }
 
+#[derive(Deserialize)]
+struct ManagementQuery {
+    path: Option<String>
+}
+
 #[get("/m")]
-async fn management() -> impl Responder {
-    HttpResponse::Ok().content_type("text/html").body(html_versionstr("web/management.html").await)
+async fn management(query: web::Query<ManagementQuery>) -> impl Responder {
+    let path = query.path.clone().unwrap_or_else(|| "".into());
+    if (path.starts_with("/") || path.contains("..")) && !path.is_empty() {
+        return HttpResponse::BadRequest().body("Invalid path");
+    }
+    HttpResponse::Ok().content_type("text/html").body(replace_files(html_versionstr("web/management.html").await, path).await)
 }
 
 async fn file_handler(req: HttpRequest) -> impl Responder {
-    let path: PathBuf = req.path().trim_start_matches('/').parse().unwrap_or_else(|_| PathBuf::from("web/index.html"));
+    let serve_path = env::var("SERVE_PATH")
+        .expect("SERVE_PATH variable must be set.");
+    
+    let path: PathBuf = PathBuf::from(serve_path).join(req.path().trim_start_matches('/'));
+    println!("Requested path: {:?}", path);
     if path.is_dir() {
         return HttpResponse::NotFound().content_type("text/html").body(html_versionstr("web/index.html").await);
     }
@@ -25,20 +41,9 @@ async fn file_handler(req: HttpRequest) -> impl Responder {
     };
 }
 
-async fn html_versionstr(path: &str) -> String {
-    let mut content = NamedFile::open_async(path).await
-        .unwrap_or_else(|_| panic!("Failed to open {}", path));
-    
-    let mut buffer = String::new();
-    content.read_to_string(&mut buffer).unwrap_or_else(|_| panic!("Failed to read {}", path));
-
-    buffer = buffer.replace("{VERSION_STRING}", VERSION_STRING);
-
-    buffer
-}
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    dotenv().ok();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     HttpServer::new(|| {
         App::new()
@@ -46,7 +51,7 @@ async fn main() -> std::io::Result<()> {
             .service(index)
             .service(management)
             .default_service(web::get().to(file_handler))
-    })
+    }).workers(1)
     .bind(("127.0.0.1", 8080))?
     .run()
     .await
