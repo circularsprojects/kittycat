@@ -1,43 +1,44 @@
-use kittycat::html::{html_versionstr, replace_files};
-
-use actix_web::{middleware::Logger, App, HttpRequest, HttpResponse, HttpServer, Responder, get, post, web};
+use log::{debug, error, info};
+use actix_web::{middleware::Logger, App, HttpRequest, HttpResponse, HttpServer, web};
 use actix_files::NamedFile;
-use std::{io::Read, path::PathBuf, format};
-use serde::{Deserialize};
+use std::{io::Read, path::PathBuf};
 use dotenvy::dotenv;
 use std::env;
 
-#[get("/")]
-async fn index() -> impl Responder {
-    HttpResponse::Ok().content_type("text/html").body(html_versionstr("web/index.html").await)
+const VERSION_STRING: &str = include_str!(concat!(env!("OUT_DIR"), "/version"));
+
+async fn index() -> HttpResponse {
+    let mut content = NamedFile::open_async("web/index.html").await
+        .unwrap_or_else(|_| panic!("Failed to open index.html"));
+    
+    let mut buffer = String::new();
+    content.read_to_string(&mut buffer).unwrap_or_else(|_| panic!("Failed to read index.html"));
+
+    buffer = buffer.replace("{VERSION_STRING}", VERSION_STRING);
+
+    HttpResponse::Ok().content_type("text/html").body(buffer)
 }
 
-#[derive(Deserialize)]
-struct ManagementQuery {
-    path: Option<String>
-}
-
-#[get("/m")]
-async fn management(query: web::Query<ManagementQuery>) -> impl Responder {
-    let path = query.path.clone().unwrap_or_else(|| "".into());
-    if (path.starts_with("/") || path.contains("..")) && !path.is_empty() {
-        return HttpResponse::BadRequest().body("Invalid path");
-    }
-    HttpResponse::Ok().content_type("text/html").body(replace_files(html_versionstr("web/management.html").await, path).await)
-}
-
-async fn file_handler(req: HttpRequest) -> impl Responder {
+async fn file_handler(req: HttpRequest) -> HttpResponse {
     let serve_path = env::var("SERVE_PATH")
         .expect("SERVE_PATH variable must be set.");
     
-    let path: PathBuf = PathBuf::from(serve_path).join(req.path().trim_start_matches('/'));
-    println!("Requested path: {:?}", path);
+    let path: PathBuf = PathBuf::from(&serve_path).join(req.path().trim_start_matches('/'));
+    info!("Received request for path: {}", path.display());
+    let canonical = match path.canonicalize() {
+        Ok(p) => p,
+        Err(_) => return index().await,
+    };
+    if !canonical.starts_with(&serve_path) {
+        error!("Canonical mismatch: {}", path.display());
+        return index().await;
+    }
     if path.is_dir() {
-        return HttpResponse::NotFound().content_type("text/html").body(html_versionstr("web/index.html").await);
+        return index().await;
     }
     let _file = match NamedFile::open(&path) {
         Ok(file) => return file.into_response(&req),
-        Err(_) => return HttpResponse::NotFound().content_type("text/html").body(html_versionstr("web/index.html").await),
+        Err(_) => return index().await,
     };
 }
 
@@ -48,8 +49,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
             .wrap(Logger::default())
-            .service(index)
-            .service(management)
+            .route("/", web::get().to(index))
             .default_service(web::get().to(file_handler))
     }).workers(1)
     .bind(("127.0.0.1", 8080))?
