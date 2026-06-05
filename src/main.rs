@@ -1,9 +1,8 @@
 use log::{error, info};
 use actix_web::{middleware::Logger, App, HttpRequest, HttpResponse, HttpServer, web};
 use actix_files::NamedFile;
-use std::{io::Read, path::PathBuf};
+use std::{io::Read, path::PathBuf, env};
 use dotenvy::dotenv;
-use std::env;
 
 const VERSION_STRING: &str = include_str!(concat!(env!("OUT_DIR"), "/version"));
 
@@ -44,9 +43,9 @@ async fn file_handler(req: HttpRequest) -> HttpResponse {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    info!("kitty cat version: {}", VERSION_STRING);
     dotenv().ok();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+    info!("{}", VERSION_STRING);
     HttpServer::new(|| {
         App::new()
             .wrap(Logger::default())
