@@ -1,4 +1,4 @@
-use log::{debug, error, info};
+use log::{error, info};
 use actix_web::{middleware::Logger, App, HttpRequest, HttpResponse, HttpServer, web};
 use actix_files::NamedFile;
 use std::{io::Read, path::PathBuf};
@@ -44,6 +44,7 @@ async fn file_handler(req: HttpRequest) -> HttpResponse {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    info!("kitty cat version: {}", VERSION_STRING);
     dotenv().ok();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     HttpServer::new(|| {
@@ -52,7 +53,10 @@ async fn main() -> std::io::Result<()> {
             .route("/", web::get().to(index))
             .default_service(web::get().to(file_handler))
     }).workers(1)
-    .bind(("127.0.0.1", 8080))?
+    .bind((
+        env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0".into()),
+        env::var("BIND_PORT").unwrap_or_else(|_| "8080".into()).parse().unwrap_or(8080)
+    ))?
     .run()
     .await
 }
