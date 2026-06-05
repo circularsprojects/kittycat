@@ -6,4 +6,4 @@ services:
     environment:
       - SERVE_PATH=/data
     volumes:
-      - /Users/circular/pawjob.dev/public/gallery:/data
+      - /path/to/folder:/data
