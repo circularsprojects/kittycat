@@ -1,5 +1,6 @@
 services:
   kittycat:
+    restart: unless-stopped
     build: .
     ports:
       - "8080:8080"

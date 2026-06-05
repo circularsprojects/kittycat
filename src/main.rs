@@ -22,7 +22,7 @@ async fn file_handler(req: HttpRequest) -> HttpResponse {
     let serve_path = env::var("SERVE_PATH")
         .expect("SERVE_PATH variable must be set.");
     
-    let path: PathBuf = PathBuf::from(&serve_path).join(req.path().trim_start_matches('/'));
+    let path: PathBuf = PathBuf::from(&serve_path).join(req.path().trim_start_matches('/').replace("%20", " "));
     info!("Received request for path: {}", path.display());
     let canonical = match path.canonicalize() {
         Ok(p) => p,
